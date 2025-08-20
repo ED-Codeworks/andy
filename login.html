@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Login Mecánica Azul</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #1565c0; color: #fff; }
+    .container { max-width: 400px; margin: 60px auto; background: #263238; padding: 30px; border-radius: 12px; box-shadow: 0 4px 24px #0006; }
+    h2 { text-align: center; color: #90caf9; }
+    input, button { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: none; }
+    button { background: #1565c0; color: #fff; font-weight: bold; cursor: pointer; }
+    button:hover { background: #0d47a1; }
+    .tab { margin: 10px 0; text-align: center; }
+    .tab button { width: auto; margin: 0 5px; background: #90caf9; color: #263238; }
+    .tab button.active { background: #1565c0; color: #fff; }
+    .msg { text-align: center; margin: 10px 0; font-weight: bold; }
+    .hidden { display: none; }
+    #fileStatus { font-size: 0.9em; color: #90caf9; text-align: center; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Mecánica Azul - Login</h2>
+    <div id="fileStatus">Selecciona el archivo <b>usuarios.txt</b> para comenzar.</div>
+    <button id="btnOpenFile">Abrir usuarios.txt</button>
+    <div class="tab">
+      <button id="btnLoginTab" class="active">Iniciar sesión</button>
+      <button id="btnRegTab">Registrarse</button>
+      <button id="btnResetTab">Cambiar clave</button>
+    </div>
+    <div id="loginPanel">
+      <input type="text" id="loginUser" placeholder="Usuario" autocomplete="username">
+      <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password">
+      <button id="btnLogin">Entrar</button>
+      <div class="msg" id="msgLogin"></div>
+    </div>
+    <div id="regPanel" class="hidden">
+      <input type="text" id="regUser" placeholder="Usuario">
+      <input type="email" id="regMail" placeholder="Correo">
+      <input type="password" id="regPass" placeholder="Contraseña">
+      <button id="btnReg">Registrar</button>
+      <div class="msg" id="msgReg"></div>
+    </div>
+    <div id="resetPanel" class="hidden">
+      <input type="text" id="resetUser" placeholder="Usuario">
+      <input type="email" id="resetMail" placeholder="Correo">
+      <input type="password" id="resetPass" placeholder="Nueva contraseña">
+      <button id="btnReset">Cambiar clave</button>
+      <div class="msg" id="msgReset"></div>
+    </div>
+    <button onclick="Retor()"><i class="fas fa-door-open"></i> Regresar Menu </button>
+
+  </div>
+  <script>
+    // Tabs
+    const loginPanel = document.getElementById('loginPanel');
+    const regPanel = document.getElementById('regPanel');
+    const resetPanel = document.getElementById('resetPanel');
+    document.getElementById('btnLoginTab').onclick = () => {
+      loginPanel.classList.remove('hidden');
+      regPanel.classList.add('hidden');
+      resetPanel.classList.add('hidden');
+      setActiveTab('btnLoginTab');
+    };
+    document.getElementById('btnRegTab').onclick = () => {
+      loginPanel.classList.add('hidden');
+      regPanel.classList.remove('hidden');
+      resetPanel.classList.add('hidden');
+      setActiveTab('btnRegTab');
+    };
+    document.getElementById('btnResetTab').onclick = () => {
+      loginPanel.classList.add('hidden');
+      regPanel.classList.add('hidden');
+      resetPanel.classList.remove('hidden');
+      setActiveTab('btnResetTab');
+    };
+    function setActiveTab(id) {
+      ['btnLoginTab','btnRegTab','btnResetTab'].forEach(tab => {
+        document.getElementById(tab).classList.remove('active');
+      });
+      document.getElementById(id).classList.add('active');
+    }
+
+    // File System Access API
+    let fileHandle = null;
+    let usuarios = [];
+
+    function parseUsuarios(text) {
+      return text.split(/\r?\n/).filter(Boolean).map(line => {
+        const [usuario, clave, correo] = line.split('/');
+        return { usuario, clave, correo };
+      });
+    }
+    function usuariosToTxt(arr) {
+      return arr.map(u => `${u.usuario}/${u.clave}/${u.correo}`).join('\n');
+    }
+
+    async function abrirArchivo() {
+      try {
+        [fileHandle] = await window.showOpenFilePicker({
+          types: [{ description: 'Archivo TXT', accept: {'text/plain': ['.txt']} }]
+        });
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        usuarios = parseUsuarios(text);
+        document.getElementById('fileStatus').textContent = 'Archivo cargado: ' + file.name;
+        document.getElementById('btnOpenFile').style.display = 'none';
+      } catch (e) {
+        document.getElementById('fileStatus').textContent = 'No se seleccionó archivo.';
+      }
+    }
+
+    async function guardarArchivo() {
+      if (!fileHandle) return;
+      const writable = await fileHandle.createWritable();
+      await writable.write(usuariosToTxt(usuarios));
+      await writable.close();
+    }
+
+    document.getElementById('btnOpenFile').onclick = abrirArchivo;
+
+    // Login
+    document.getElementById('btnLogin').onclick = async () => {
+      const usuario = document.getElementById('loginUser').value.trim();
+      const clave = document.getElementById('loginPass').value;
+      const msg = document.getElementById('msgLogin');
+      msg.textContent = '';
+      if(!fileHandle) return msg.textContent = 'Primero abre el archivo usuarios.txt';
+      if(!usuario || !clave) return msg.textContent = 'Completa todos los campos';
+      const u = usuarios.find(u => u.usuario === usuario && u.clave === clave);
+      if(u) { 
+        msg.textContent = `Bienvenido, ${usuario}`;
+        msg.style.color = '#90caf9';
+        setTimeout(() => window.location.href = 'Untitled-1.html', 1000); // Redirige después de 1 segundo
+      } else {
+        msg.textContent = 'Usuario o clave incorrectos';
+        msg.style.color = '#fbc02d';
+      }
+    };
+
+    // Registro
+    document.getElementById('btnReg').onclick = async () => {
+      const usuario = document.getElementById('regUser').value.trim();
+      const correo = document.getElementById('regMail').value.trim();
+      const clave = document.getElementById('regPass').value;
+      const msg = document.getElementById('msgReg');
+      msg.textContent = '';
+      if(!fileHandle) return msg.textContent = 'Primero abre el archivo usuarios.txt';
+      if(!usuario || !correo || !clave) return msg.textContent = 'Completa todos los campos';
+      if(usuarios.find(u => u.usuario === usuario)) return msg.textContent = 'Usuario ya existe';
+      if(usuarios.find(u => u.correo === correo)) return msg.textContent = 'Correo ya registrado';
+      usuarios.push({ usuario, clave, correo });
+      await guardarArchivo();
+      msg.textContent = 'Registro exitoso';
+      msg.style.color = '#90caf9';
+    };
+
+    // Cambiar clave
+    document.getElementById('btnReset').onclick = async () => {
+      const usuario = document.getElementById('resetUser').value.trim();
+      const correo = document.getElementById('resetMail').value.trim();
+      const clave = document.getElementById('resetPass').value;
+      const msg = document.getElementById('msgReset');
+      msg.textContent = '';
+      if(!fileHandle) return msg.textContent = 'Primero abre el archivo usuarios.txt';
+      if(!usuario || !correo || !clave) return msg.textContent = 'Completa todos los campos';
+      const idx = usuarios.findIndex(u => u.usuario === usuario && u.correo === correo);
+      if(idx === -1) return msg.textContent = 'Usuario y correo no coinciden';
+      usuarios[idx].clave = clave;
+      await guardarArchivo();
+      msg.textContent = 'Contraseña actualizada';
+      msg.style.color = '#90caf9';
+    };
+    function Retor(){
+    window.location.href = "index.html";
+}
+  </script>
+</body>
+</html>

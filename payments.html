@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagos de Nómina</title>
+    <!-- Añadimos la biblioteca jsPDF para generar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .balance {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+        .buttons {
+            margin: 20px 0;
+        }
+        button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .back-button {
+            background-color: #6c757d;
+        }
+        .back-button:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="balance">
+            Saldo de empresa: $<span id="companyBalance">526000</span>
+        </div>
+
+        <table id="payrollTable">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Correo</th>
+                    <th>Líquido a Pagar</th>
+                </tr>
+            </thead>
+            <tbody id="payrollBody"></tbody>
+        </table>
+
+        <div class="buttons">
+            <button onclick="processPayment()">Pagar</button>
+            <button class="back-button" onclick="goBack()">Volver</button>
+        </div>
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+        let companyBalance = 526000;
+
+        function loadEmployees() {
+            const employeesData = JSON.parse(localStorage.getItem('employeesData') || '[]');
+            const tbody = document.getElementById('payrollBody');
+            tbody.innerHTML = '';
+
+            employeesData.forEach(emp => {
+                const netPay = calculateNetPay(emp);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${emp.name}</td>
+                    <td>${emp.email}</td>
+                    <td>$${netPay.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function calculateNetPay(employee) {
+            const benefits = calculateBenefits(employee.salary);
+            const deductions = calculateDeductions(employee.salary);
+            const overtimePay = calculateOvertime(employee.salary, employee.overtime);
+
+            const totalIncome = 
+                employee.salary +
+                employee.bonus +
+                employee.transport +
+                employee.food +
+                benefits.d13 +
+                benefits.d14 +
+                benefits.reserveFunds +
+                overtimePay;
+
+            const totalDeductions =
+                deductions.iess +
+                employee.iessLoan +
+                deductions.incomeTax +
+                deductions.privateInsurance +
+                employee.commissary;
+
+            return totalIncome - totalDeductions;
+        }
+
+        function calculateBenefits(salary) {
+            const currentDate = new Date();
+            const month = currentDate.getMonth();
+            
+            const d13 = month === 11 ? salary / 12 : 0;
+            const d14 = month === 7 ? salary / 12 : 0;
+            const reserveFunds = salary * 0.0833;
+            
+            return { d13, d14, reserveFunds };
+        }
+
+        function calculateDeductions(salary) {
+            const iess = salary * 0.0945;
+            const incomeTax = salary > 11310 ? salary * 0.05 : 0;
+            const privateInsurance = salary * 0.01;
+            return { iess, incomeTax, privateInsurance };
+        }
+
+        function calculateOvertime(salary, hours) {
+            const hourlyRate = salary / 240;
+            const overtimeRate = hourlyRate * 1.5;
+            return overtimeRate * hours;
+        }
+
+        function processPayment() {
+            if (!confirm('¿Está seguro de realizar el pago?')) return;
+
+            const employeesData = JSON.parse(localStorage.getItem('employeesData') || '[]');
+            const totalPayroll = employeesData.reduce((sum, emp) => sum + calculateNetPay(emp), 0);
+
+            if (totalPayroll > companyBalance) {
+                alert('Saldo insuficiente para realizar el pago');
+                return;
+            }
+
+            const previousBalance = companyBalance;
+            companyBalance -= totalPayroll;
+            document.getElementById('companyBalance').textContent = companyBalance.toFixed(2);
+
+            // Generar y descargar el PDF
+            const now = new Date();
+            generatePaymentPDF(employeesData, totalPayroll, previousBalance, companyBalance, now);
+        }
+
+        function generatePaymentPDF(employeesData, totalPayroll, previousBalance, currentBalance, dateTime) {
+            const doc = new jsPDF();
+            
+            // Extraer información de fecha y hora
+            const day = dateTime.getDate();
+            const hours = dateTime.getHours();
+            const minutes = dateTime.getMinutes();
+            const dateStr = dateTime.toLocaleDateString();
+            const timeStr = dateTime.toLocaleTimeString();
+            
+            // Título
+            doc.setFontSize(16);
+            doc.text('RECIBO DE PAGO DE NÓMINA', 105, 20, { align: 'center' });
+            
+            // Fecha y hora
+            doc.setFontSize(12);
+            doc.text(`Fecha: ${dateStr} ${timeStr}`, 20, 30);
+            
+            // Texto personalizado con día, hora y minutos
+            doc.text(`Estos pagos se realizaron del día (${day}) a las (${hours}) horas y (${minutes}) minutos`, 20, 40);
+            
+            // Línea separadora
+            doc.line(20, 45, 190, 45);
+            
+            // Resumen de pago
+            doc.text('Resumen de pago:', 20, 55);
+            doc.text(`Total pagado: $${totalPayroll.toFixed(2)}`, 30, 65);
+            doc.text(`Saldo anterior: $${previousBalance.toFixed(2)}`, 30, 75);
+            doc.text(`Saldo actual: $${currentBalance.toFixed(2)}`, 30, 85);
+            
+            // Tabla de empleados
+            const tableData = employeesData.map(emp => {
+                const netPay = calculateNetPay(emp);
+                return [emp.name, emp.email, `$${netPay.toFixed(2)}`];
+            });
+            
+            doc.autoTable({
+                startY: 95,
+                head: [['Nombre', 'Correo', 'Líquido a Pagar']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [0, 123, 255] }
+            });
+            
+            // Pie de página
+            const finalY = doc.lastAutoTable.finalY || 120;
+            doc.text('Pagos realizados exitosamente', 20, finalY + 10);
+            
+            // Descargar el PDF
+            doc.save('recibo-nomina.pdf');
+        }
+
+        function goBack() {
+            window.location.href = 'Untitled-1.html';
+        }
+
+        // Cargar datos al iniciar
+        loadEmployees();
+    </script>
+</body>
+</html>
